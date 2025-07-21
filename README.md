@@ -21,12 +21,12 @@ git clone https://github.com/GProjectdev/Kubernetes_Installer_with_CRIO.git
 
 권한부여
 ```
-chmod +x ./Kubernetes_Installer_with_CRIO/setup-k8s.sh
+chmod +x Kubernetes_Installer_with_CRIO/k8s-setup.sh
 ```
 
 파일 실행
 ```
-sudo ./Kubernetes_Installer_with_CRIO/setup-k8s.sh
+sudo ./Kubernetes_Installer_with_CRIO/k8s-setup.sh
 ```
 
 ## Master Node 설정이기에 해당 Node에 Pod를 배포하기 위해서는 다음을 진행해야 합니다.

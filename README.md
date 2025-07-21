@@ -16,17 +16,18 @@ sudo su -
 ## 사용 방법
 파일 다운
 ```
-git clone https://github.com/GProjectdev/Kubernetes_Installer_with_CRIO.git 
+git clone https://github.com/GProjectdev/Kubernetes_Installer_with_CRIO.git
+Kubernetes_Installer_with_CRIO
 ```
 
 권한부여
 ```
-chmod +x setup-k8s.sh
+chmod +x ./Kubernetes_Installer_with_CRIO/setup-k8s.sh
 ```
 
 파일 실행
 ```
-sudo ./setup-k8s.sh
+sudo ./Kubernetes_Installer_with_CRIO/setup-k8s.sh
 ```
 
 ## Master Node 설정이기에 해당 Node에 Pod를 배포하기 위해서는 다음을 진행해야 합니다.

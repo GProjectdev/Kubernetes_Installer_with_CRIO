@@ -17,7 +17,6 @@ sudo su -
 파일 다운
 ```
 git clone https://github.com/GProjectdev/Kubernetes_Installer_with_CRIO.git
-Kubernetes_Installer_with_CRIO
 ```
 
 권한부여

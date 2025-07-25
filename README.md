@@ -4,15 +4,16 @@
 - CRI:CRI-O(v1.33)
 - CNI: Flannel
 
-현재 CRI-O 및 Kubernetes 사용 Version은 1.33으로 이를 바꾸기 위해서는 스크립트 파일에 들어가 다음을 원하는 버전으로 바꿔야 합니다.
+다음 스크립트 파일은 Root 계정으로 실행해야 합니다.
+```
+sudo su -
+``` 
+또한 현재 CRI-O 및 Kubernetes 사용 Version은 1.33으로 이를 바꾸기 위해서는 스크립트 파일에 들어가 다음을 원하는 버전으로 바꿔야 합니다.
 ```
 KUBERNETES_VERSION="v1.33"
 CRIO_VERSION="v1.33"
 ```
-또한 다음 스크립트 파일은 Root 계정으로 실행해야 합니다.
-```
-sudo su -
-``` 
+
 ## 사용 방법
 파일 다운
 ```

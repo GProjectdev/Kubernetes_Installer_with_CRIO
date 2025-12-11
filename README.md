@@ -2,7 +2,7 @@
 현재 사용하는 tool 및 version들은 다음과 같습니다.
 - Kubernetes:v1.33
 - CRI:CRI-O(v1.33)
-- CNI: Flannel
+- CNI: Cillium
 
 다음 스크립트 파일은 Root 계정으로 실행해야 합니다.
 ```

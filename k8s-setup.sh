@@ -50,15 +50,40 @@ EOF
 sysctl --system
 
 echo "[Step 7] kubeadm 초기화"
-kubeadm init --pod-network-cidr=10.244.0.0/16
+export CIDR=10.85.0.0/16
+kubeadm init --pod-network-cidr=$CIDR --crisocket=unix:///var/run/crio/crio.sock
 
 echo "[Step 8] kubeconfig 설정"
 mkdir -p $HOME/.kube
 cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 chown $(id -u):$(id -g) $HOME/.kube/config
 
-echo "[Step 9] Flannel CNI 설치"
-kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+#helm 설치
+echo "[Step 19] cillium 설치"
+#helm 설치
+sudo apt-get install curl gpg apt-transport-https --yes
+curl -fsSL https://packages.buildkite.com/helm-linux/helm-debian/gpgkey |
+gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null
+echo "deb [signed-by=/usr/share/keyrings/helm.gpg]
+https://packages.buildkite.com/helm-linux/helm-debian/any/ any main" |
+sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
+sudo apt-get update
+sudo apt-get install helm
+
+# Cilium CLI 설치
+CILIUM_CLI_VERSION=$(curl -s https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt)
+CLI_ARCH=amd64
+if [ "$(uname -m)" = "aarch64" ]; then CLI_ARCH=arm64; fi
+curl -L --fail --remote-name-all https://github.com/cilium/ciliumcli/releases/download/${CILIUM_CLI_VERSION}/ciliumlinux-${CLI_ARCH}.tar.gz{,.sha256sum}
+sha256sum --check cilium-linux-${CLI_ARCH}.tar.gz.sha256sum
+sudo tar xzvfC cilium-linux-${CLI_ARCH}.tar.gz /usr/local/bin
+rm cilium-linux-${CLI_ARCH}.tar.gz{,.sha256sum}
+
+# Cilium 설치
+cilium install --version 1.18.2
+
+# Cilium 설치 확인
+cilium status --wait
 
 echo "[Step 10] kubectl bash-completion 및 alias 설정"
 source /usr/share/bash-completion/bash_completion

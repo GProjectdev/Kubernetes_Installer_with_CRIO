@@ -51,7 +51,7 @@ sysctl --system
 
 echo "[Step 7] kubeadm 초기화"
 export CIDR=10.85.0.0/16
-kubeadm init --pod-network-cidr=$CIDR --crisocket=unix:///var/run/crio/crio.sock
+kubeadm init --pod-network-cidr=$CIDR --cri-socket=unix:///var/run/crio/crio.sock
 
 echo "[Step 8] kubeconfig 설정"
 mkdir -p $HOME/.kube

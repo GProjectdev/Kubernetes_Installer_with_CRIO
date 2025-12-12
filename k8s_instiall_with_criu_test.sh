@@ -4,8 +4,8 @@ set -e
 # ==============================
 # 버전 설정 (실제 존재하는 버전으로 조정 필요할 수 있음)
 # ==============================
-KUBERNETES_VERSION="v1.33"
-CRIO_VERSION="v1.33"
+KUBERNETES_VERSION="v1.32"
+CRIO_VERSION="v1.32"
 POD_CIDR="10.85.0.0/16"
 
 # ==============================
@@ -13,15 +13,21 @@ POD_CIDR="10.85.0.0/16"
 # ==============================
 echo "[Step 1] 필수 패키지 설치"
 apt-get update
-apt-get install -y \
-  software-properties-common \
-  curl \
-  gnupg2 \
-  bash-completion \
-  ca-certificates \
-  lsb-release
+apt-get install -y software-properties-common curl gnupg2 bash-completion
 
+# APT 키 디렉토리 생성
 mkdir -p /etc/apt/keyrings
+
+
+# ==============================
+# Step 2. 커널 설정
+# ==============================
+echo "[Step 2] 커널 설정"
+
+echo 'net.ipv4.ip_forward=1' | sudo tee -a /etc/sysctl.conf > /dev/null
+sudo apt-get install libnftables-dev
+echo "br_netfilter" | sudo tee /etc/modules-load.d/br_netfilter.conf
+modprobe br_netfilter
 
 # ==============================
 # Step 2. Kubernetes APT 저장소

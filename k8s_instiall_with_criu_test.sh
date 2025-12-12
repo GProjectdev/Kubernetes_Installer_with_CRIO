@@ -18,17 +18,6 @@ apt-get install -y software-properties-common curl gnupg2 bash-completion
 # APT 키 디렉토리 생성
 mkdir -p /etc/apt/keyrings
 
-
-# ==============================
-# Step 2. 커널 설정
-# ==============================
-echo "[Step 2] 커널 설정"
-
-echo 'net.ipv4.ip_forward=1' | sudo tee -a /etc/sysctl.conf > /dev/null
-sudo apt-get install libnftables-dev
-echo "br_netfilter" | sudo tee /etc/modules-load.d/br_netfilter.conf
-modprobe br_netfilter
-
 # ==============================
 # Step 2. Kubernetes APT 저장소
 # ==============================
@@ -57,11 +46,7 @@ echo "deb [signed-by=/etc/apt/keyrings/cri-o-apt-keyring.gpg] https://download.o
 echo "[Step 4] Kubernetes 및 CRI-O 설치"
 
 apt-get update
-apt-get install -y \
-  cri-o \
-  kubelet \
-  kubeadm \
-  kubectl
+apt-get install -y cri-o kubelet kubeadm kubectl
 
 # kubelet 자동 시작 방지 (kubeadm init 전에)
 systemctl disable kubelet || true

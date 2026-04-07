@@ -10,15 +10,15 @@ set -Eeuo pipefail
 # ==============================================================================
 
 # Error Trap with Line Number and Command
-trap 'echo "[ERROR] Script failed at line ${LINENO} near command: ${BASH_COMMAND}" >&2' ERR
+trap 'echo "[오류] ${LINENO}번째 줄에서 실패: ${BASH_COMMAND}" >&2' ERR
 
 # ------------------------------------------------------------------------------
 # 0. Safety & Environment Checks
 # ------------------------------------------------------------------------------
 # 0.1 Root Check
 if [ "$EUID" -ne 0 ]; then
-  echo "[ERROR] This script must be run as root." >&2
-  echo "Usage: sudo -i, then run this script." >&2
+  echo "[오류] 이 스크립트는 root 권한으로 실행해야 합니다." >&2
+  echo "사용법: sudo -i 후 이 스크립트를 실행하세요." >&2
   exit 1
 fi
 
@@ -26,9 +26,9 @@ umask 022
 
 # 0.2 Existing Installation Check
 if [ -f "/etc/kubernetes/admin.conf" ] || [ -d "/var/lib/etcd" ]; then
-    echo "[ERROR] Detected existing Kubernetes configuration." >&2
-    echo "Files found: /etc/kubernetes/admin.conf OR /var/lib/etcd" >&2
-    echo "Please run 'kubeadm reset' or clean up the environment before running this script." >&2
+    echo "[오류] 기존 Kubernetes 구성이 감지되었습니다." >&2
+    echo "감지된 경로: /etc/kubernetes/admin.conf 또는 /var/lib/etcd" >&2
+    echo "이 스크립트 실행 전에 'kubeadm reset' 또는 수동 정리를 먼저 수행하세요." >&2
     exit 1
 fi
 
@@ -39,30 +39,48 @@ CURRENT_KERNEL_MAIN=$(echo "$CURRENT_KERNEL_FULL" | cut -d- -f1) # Extracts 6.8.
 MIN_KERNEL="5.10"
 
 if dpkg --compare-versions "$CURRENT_KERNEL_MAIN" lt "$MIN_KERNEL"; then
-    echo "[ERROR] Cilium 1.18.x strictly requires Linux Kernel $MIN_KERNEL or higher." >&2
-    echo "        Current Kernel: $CURRENT_KERNEL_MAIN ($CURRENT_KERNEL_FULL)" >&2
-    echo "        Please upgrade your kernel before proceeding." >&2
+    echo "[오류] Cilium 1.18.x는 Linux Kernel ${MIN_KERNEL} 이상이 필요합니다." >&2
+    echo "        현재 커널: $CURRENT_KERNEL_MAIN ($CURRENT_KERNEL_FULL)" >&2
+    echo "        커널 업그레이드 후 다시 시도하세요." >&2
     exit 1
 fi
 
 # ------------------------------------------------------------------------------
 # 1. Configuration & User Input
 # ------------------------------------------------------------------------------
-# Default to v1.35 (Latest Stable)
+# Default fallback when latest stable lookup fails
 DEFAULT_K8S_VER="v1.35"
+
+get_latest_k8s_minor_version() {
+  local stable_full stable_minor
+  stable_full="$(curl -fsSL https://dl.k8s.io/release/stable.txt 2>/dev/null || true)"
+
+  if [[ "${stable_full}" =~ ^v1\.[0-9]+\.[0-9]+$ ]]; then
+    stable_minor="$(echo "${stable_full}" | cut -d. -f1-2)"
+    echo "${stable_minor}"
+    return 0
+  fi
+
+  return 1
+}
+
+if ! LATEST_K8S_VER="$(get_latest_k8s_minor_version)"; then
+  LATEST_K8S_VER="${DEFAULT_K8S_VER}"
+  echo "[경고] 최신 Kubernetes 안정 버전 조회에 실패하여 ${DEFAULT_K8S_VER}를 사용합니다." >&2
+fi
 # Cilium Version: Using 1.18.6 (Latest patch in 1.18 series as of context) for better k8s 1.35 compatibility
 CILIUM_VERSION="1.18.6"
 CIDR="10.85.0.0/16"
 
 echo "============================================================"
-echo " Kubernetes Installation Setup"
+echo " Kubernetes 설치 설정"
 echo "============================================================"
-echo -n "Enter Kubernetes Version to install (e.g., v1.35) [Default: ${DEFAULT_K8S_VER}]: "
+echo -n "설치할 Kubernetes 버전을 입력하세요 (예: v1.35) [기본값: ${LATEST_K8S_VER}]: "
 read -r USER_INPUT
 
 # Version Selection Logic
 if [ -z "$USER_INPUT" ]; then
-  KUBERNETES_VERSION="${DEFAULT_K8S_VER}"
+  KUBERNETES_VERSION="${LATEST_K8S_VER}"
 else
   # Auto-prepend 'v' if missing
   if [[ "${USER_INPUT}" != v* ]]; then
@@ -74,7 +92,7 @@ fi
 
 # Regex Validation (Strictly v1.XX)
 if [[ ! "${KUBERNETES_VERSION}" =~ ^v1\.[0-9]{2}$ ]]; then
-  echo "[ERROR] Invalid version format: ${KUBERNETES_VERSION}. Expected format: v1.XX (e.g., v1.35)" >&2
+  echo "[오류] 버전 형식이 잘못되었습니다: ${KUBERNETES_VERSION}. v1.XX 형식(예: v1.35)으로 입력하세요." >&2
   exit 1
 fi
 
@@ -83,21 +101,21 @@ CRIO_VERSION="${KUBERNETES_VERSION}"
 
 echo ""
 echo "------------------------------------------------------------"
-echo " [Configuration Confirm]"
-echo " - Kubernetes Version : ${KUBERNETES_VERSION}"
-echo " - CRI-O Version      : ${CRIO_VERSION}"
-echo " - Cilium Version     : ${CILIUM_VERSION}"
-echo " - Pod CIDR           : ${CIDR}"
-echo " - Kernel Version     : ${CURRENT_KERNEL_FULL} (OK)"
+echo " [설정 확인]"
+echo " - Kubernetes 버전 : ${KUBERNETES_VERSION}"
+echo " - CRI-O 버전      : ${CRIO_VERSION}"
+echo " - Cilium 버전     : ${CILIUM_VERSION}"
+echo " - Pod CIDR         : ${CIDR}"
+echo " - 커널 버전       : ${CURRENT_KERNEL_FULL} (정상)"
 echo "------------------------------------------------------------"
-echo "Starting installation in 3 seconds... (Press Ctrl+C to cancel)"
+echo "3초 후 설치를 시작합니다... (취소: Ctrl+C)"
 sleep 3
 echo ""
 
 # ------------------------------------------------------------------------------
 # 2. System Preparation
 # ------------------------------------------------------------------------------
-echo "[Step 1] System Configuration (Deps, Swap, Modules, Sysctl)"
+echo "[1단계] 시스템 설정 (의존성, 스왑, 모듈, Sysctl)"
 
 # 2.1 Install Critical Dependencies
 # Added: conntrack, socat, iproute2, iptables which are critical for K8s networking
@@ -109,7 +127,7 @@ apt-get install -y \
 
 # 2.2 Disable Swap (Permanent)
 if grep -q "swap" /etc/fstab; then
-    echo " > Disabling swap in /etc/fstab (Backup created at /etc/fstab.bak)..."
+    echo " > /etc/fstab의 swap을 비활성화합니다 (백업: /etc/fstab.bak)"
     sed -ri.bak '/\sswap\s/s/^/#/' /etc/fstab
 fi
 swapoff -a
@@ -138,7 +156,7 @@ install -d -m 0755 /etc/apt/keyrings
 # ------------------------------------------------------------------------------
 # 3. APT Repositories Setup
 # ------------------------------------------------------------------------------
-echo "[Step 2] Configuring APT Repositories"
+echo "[2단계] APT 저장소 구성"
 
 # Kubernetes Official Repo (pkgs.k8s.io)
 curl -fsSL "https://pkgs.k8s.io/core:/stable:/${KUBERNETES_VERSION}/deb/Release.key" \
@@ -159,7 +177,7 @@ echo "deb [signed-by=/etc/apt/keyrings/cri-o-apt-keyring.gpg] https://download.o
 # ------------------------------------------------------------------------------
 # 4. Install Packages
 # ------------------------------------------------------------------------------
-echo "[Step 3] Installing Packages (CRI-O, Kubeadm, Kubelet, Kubectl)"
+echo "[3단계] 패키지 설치 (CRI-O, Kubeadm, Kubelet, Kubectl)"
 apt-get update
 apt-get install -y cri-o kubelet kubeadm kubectl
 
@@ -175,35 +193,35 @@ systemctl enable --now crio
 # ------------------------------------------------------------------------------
 # 5. Cluster Initialization
 # ------------------------------------------------------------------------------
-echo "[Step 4] Initializing Kubernetes Cluster"
+echo "[4단계] Kubernetes 클러스터 초기화"
 kubeadm init --pod-network-cidr="${CIDR}" --cri-socket=unix:///var/run/crio/crio.sock
 
 # ------------------------------------------------------------------------------
 # 5.1 Verification Wait Loop
 # ------------------------------------------------------------------------------
-echo " > Waiting for API Server to be ready..."
+echo " > API 서버 준비 상태를 확인합니다..."
 export KUBECONFIG=/etc/kubernetes/admin.conf
 
 # Wait up to 60 seconds
 MAX_RETRIES=30
 for ((i=1; i<=MAX_RETRIES; i++)); do
     if kubectl get --raw='/readyz' >/dev/null 2>&1; then
-        echo " > API Server is READY."
+        echo " > API 서버가 준비되었습니다."
         break
     fi
-    echo "   ... waiting for API server ($i/$MAX_RETRIES)"
+    echo "   ... API 서버 대기 중 ($i/$MAX_RETRIES)"
     sleep 2
 done
 
 if ! kubectl get --raw='/readyz' >/dev/null 2>&1; then
-    echo "[ERROR] API Server did not become ready in time." >&2
+    echo "[오류] 제한 시간 내 API 서버가 준비되지 않았습니다." >&2
     exit 1
 fi
 
 # ------------------------------------------------------------------------------
 # 6. Kubeconfig Setup
 # ------------------------------------------------------------------------------
-echo "[Step 5] Setting up Kubeconfig"
+echo "[5단계] kubeconfig 설정"
 
 mkdir -p "$HOME/.kube"
 cp -f /etc/kubernetes/admin.conf "$HOME/.kube/config"
@@ -213,7 +231,7 @@ if [ -n "${SUDO_USER:-}" ]; then
     USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
     USER_GID=$(id -gn "$SUDO_USER")
     
-    echo " > Copying kubeconfig to sudo user ($SUDO_USER)..."
+    echo " > sudo 사용자($SUDO_USER) 홈으로 kubeconfig를 복사합니다..."
     mkdir -p "$USER_HOME/.kube"
     cp -f /etc/kubernetes/admin.conf "$USER_HOME/.kube/config"
     chown -R "$SUDO_USER:$USER_GID" "$USER_HOME/.kube"
@@ -223,20 +241,20 @@ fi
 # ------------------------------------------------------------------------------
 # 7. Install Tools (Helm & Cilium)
 # ------------------------------------------------------------------------------
-echo "[Step 6] Installing Helm"
+echo "[6단계] Helm 설치"
 curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
 chmod 700 get_helm.sh
 ./get_helm.sh
 rm get_helm.sh
 
-echo "[Step 7] Installing Cilium"
+echo "[7단계] Cilium 설치"
 # 7.1 Install Cilium CLI with robust error check (-fsSL)
 # Fetching latest stable version strictly
 CILIUM_CLI_VERSION=$(curl -fsSL https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt)
 CLI_ARCH=amd64
 if [ "$(uname -m)" = "aarch64" ]; then CLI_ARCH=arm64; fi
 
-echo " > Downloading Cilium CLI ${CILIUM_CLI_VERSION}..."
+echo " > Cilium CLI ${CILIUM_CLI_VERSION} 다운로드 중..."
 curl -L --fail --remote-name-all \
   "https://github.com/cilium/cilium-cli/releases/download/${CILIUM_CLI_VERSION}/cilium-linux-${CLI_ARCH}.tar.gz"{,.sha256sum}
 sha256sum --check cilium-linux-${CLI_ARCH}.tar.gz.sha256sum
@@ -246,17 +264,17 @@ rm cilium-linux-${CLI_ARCH}.tar.gz{,.sha256sum}
 # 7.2 Install Cilium CNI
 # Using updated version 1.18.6 for better stability with newer K8s
 # Explicitly setting ipam.mode=kubernetes to match kubeadm pod-network-cidr
-echo " > Installing Cilium CNI (Version: ${CILIUM_VERSION}) with ipam.mode=kubernetes..."
+echo " > Cilium CNI 설치 중 (버전: ${CILIUM_VERSION}, ipam.mode=kubernetes)..."
 cilium install --version "${CILIUM_VERSION}" \
   --helm-set ipam.mode=kubernetes
 
-echo " > Waiting for Cilium status..."
+echo " > Cilium 상태를 확인합니다..."
 cilium status --wait
 
 # ------------------------------------------------------------------------------
 # 8. User Convenience (.bashrc)
 # ------------------------------------------------------------------------------
-echo "[Step 8] Configuring Shell Convenience"
+echo "[8단계] 쉘 편의 설정"
 
 add_bash_config() {
     local target_file="$1"
@@ -270,7 +288,7 @@ complete -F __start_kubectl k
 ### K8S-SETUP-END
 EOF
     else
-        echo " > Bash config already present in $target_file"
+        echo " > Bash 설정이 이미 존재합니다: $target_file"
     fi
 }
 
@@ -295,9 +313,9 @@ fi
 # ------------------------------------------------------------------------------
 echo ""
 echo "============================================================"
-echo " [Installation Completed Successfully]"
+echo " [설치가 완료되었습니다]"
 echo "============================================================"
-echo " 1. Reload your shell:  source ~/.bashrc"
-echo " 2. Check Nodes:        kubectl get nodes"
-echo " 3. Check Pods:         kubectl get pods -A"
+echo " 1. 쉘 다시 불러오기:  source ~/.bashrc"
+echo " 2. 노드 확인:        kubectl get nodes"
+echo " 3. 파드 확인:        kubectl get pods -A"
 echo "============================================================"

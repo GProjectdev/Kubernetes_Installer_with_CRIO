@@ -9,7 +9,7 @@ set -Eeuo pipefail
 # Security: Enforces Root verification, strict error handling, dependency checks
 # ==============================================================================
 
-trap 'echo "[ERROR] Script failed at line ${LINENO} near command: ${BASH_COMMAND}" >&2' ERR
+trap 'echo "[오류] ${LINENO}번째 줄에서 실패: ${BASH_COMMAND}" >&2' ERR
 
 APT_GET=(apt-get -o Dpkg::Lock::Timeout=120 -o Acquire::Retries=3)
 
@@ -17,8 +17,8 @@ APT_GET=(apt-get -o Dpkg::Lock::Timeout=120 -o Acquire::Retries=3)
 # 0. Safety & Environment Checks
 # ------------------------------------------------------------------------------
 if [ "$EUID" -ne 0 ]; then
-  echo "[ERROR] This script must be run as root." >&2
-  echo "Usage: sudo -i, then run this script." >&2
+  echo "[오류] 이 스크립트는 root 권한으로 실행해야 합니다." >&2
+  echo "사용법: sudo -i 후 이 스크립트를 실행하세요." >&2
   exit 1
 fi
 
@@ -26,9 +26,9 @@ umask 022
 
 # Abort if node already joined a cluster
 if [ -f "/etc/kubernetes/kubelet.conf" ] || [ -d "/etc/kubernetes/pki" ]; then
-  echo "[ERROR] Detected existing Kubernetes node configuration." >&2
-  echo "Files found: /etc/kubernetes/kubelet.conf OR /etc/kubernetes/pki" >&2
-  echo "Please run 'kubeadm reset' or clean up the environment before running this script." >&2
+  echo "[오류] 기존 Kubernetes 워커 노드 구성이 감지되었습니다." >&2
+  echo "감지된 경로: /etc/kubernetes/kubelet.conf 또는 /etc/kubernetes/pki" >&2
+  echo "이 스크립트 실행 전에 'kubeadm reset' 또는 수동 정리를 먼저 수행하세요." >&2
   exit 1
 fi
 
@@ -38,8 +38,8 @@ CURRENT_KERNEL_MAIN=$(echo "$CURRENT_KERNEL_FULL" | cut -d- -f1)
 MIN_KERNEL="5.10"
 
 if dpkg --compare-versions "$CURRENT_KERNEL_MAIN" lt "$MIN_KERNEL"; then
-  echo "[ERROR] This setup requires Linux Kernel $MIN_KERNEL or higher." >&2
-  echo "        Current Kernel: $CURRENT_KERNEL_MAIN ($CURRENT_KERNEL_FULL)" >&2
+  echo "[오류] 이 설치는 Linux Kernel ${MIN_KERNEL} 이상이 필요합니다." >&2
+  echo "        현재 커널: $CURRENT_KERNEL_MAIN ($CURRENT_KERNEL_FULL)" >&2
   exit 1
 fi
 
@@ -48,15 +48,33 @@ fi
 # ------------------------------------------------------------------------------
 DEFAULT_K8S_VER="v1.35"
 
+get_latest_k8s_minor_version() {
+  local stable_full stable_minor
+  stable_full="$(curl -fsSL https://dl.k8s.io/release/stable.txt 2>/dev/null || true)"
+
+  if [[ "${stable_full}" =~ ^v1\.[0-9]+\.[0-9]+$ ]]; then
+    stable_minor="$(echo "${stable_full}" | cut -d. -f1-2)"
+    echo "${stable_minor}"
+    return 0
+  fi
+
+  return 1
+}
+
+if ! LATEST_K8S_VER="$(get_latest_k8s_minor_version)"; then
+  LATEST_K8S_VER="${DEFAULT_K8S_VER}"
+  echo "[경고] 최신 Kubernetes 안정 버전 조회에 실패하여 ${DEFAULT_K8S_VER}를 사용합니다." >&2
+fi
+
 echo "============================================================"
-echo " Kubernetes Worker Installation Setup"
+echo " Kubernetes 워커 노드 설치 설정"
 echo "============================================================"
 
-echo -n "Enter Kubernetes Version to install (e.g., v1.35) [Default: ${DEFAULT_K8S_VER}]: "
+echo -n "설치할 Kubernetes 버전을 입력하세요 (예: v1.35) [기본값: ${LATEST_K8S_VER}]: "
 read -r USER_INPUT
 
 if [ -z "$USER_INPUT" ]; then
-  KUBERNETES_VERSION="${DEFAULT_K8S_VER}"
+  KUBERNETES_VERSION="${LATEST_K8S_VER}"
 else
   if [[ "${USER_INPUT}" != v* ]]; then
     KUBERNETES_VERSION="v${USER_INPUT}"
@@ -66,57 +84,57 @@ else
 fi
 
 if [[ ! "${KUBERNETES_VERSION}" =~ ^v1\.[0-9]{2}$ ]]; then
-  echo "[ERROR] Invalid version format: ${KUBERNETES_VERSION}. Expected format: v1.XX (e.g., v1.35)" >&2
+  echo "[오류] 버전 형식이 잘못되었습니다: ${KUBERNETES_VERSION}. v1.XX 형식(예: v1.35)으로 입력하세요." >&2
   exit 1
 fi
 
 CRIO_VERSION="${KUBERNETES_VERSION}"
 
-echo -n "Enter Control Plane Endpoint (e.g., 10.0.0.10:6443): "
+echo -n "컨트롤 플레인 엔드포인트를 입력하세요 (예: 10.0.0.10:6443): "
 read -r CONTROL_PLANE_ENDPOINT
 if [[ ! "${CONTROL_PLANE_ENDPOINT}" =~ ^[a-zA-Z0-9._-]+:[0-9]{2,5}$ ]]; then
-  echo "[ERROR] Invalid endpoint format: ${CONTROL_PLANE_ENDPOINT}. Expected host:port" >&2
+  echo "[오류] 엔드포인트 형식이 잘못되었습니다: ${CONTROL_PLANE_ENDPOINT}. host:port 형식으로 입력하세요." >&2
   exit 1
 fi
 
-echo -n "Enter kubeadm join token (e.g., abcdef.0123456789abcdef): "
+echo -n "kubeadm 조인 토큰을 입력하세요 (예: abcdef.0123456789abcdef): "
 read -r JOIN_TOKEN
 if [[ ! "${JOIN_TOKEN}" =~ ^[a-z0-9]{6}\.[a-z0-9]{16}$ ]]; then
-  echo "[ERROR] Invalid token format." >&2
+  echo "[오류] 토큰 형식이 잘못되었습니다." >&2
   exit 1
 fi
 
-echo -n "Enter discovery token CA cert hash (e.g., sha256:...): "
+echo -n "discovery token CA cert hash를 입력하세요 (예: sha256:...): "
 read -r DISCOVERY_HASH
 if [[ ! "${DISCOVERY_HASH}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
-  echo "[ERROR] Invalid discovery hash format." >&2
+  echo "[오류] discovery hash 형식이 잘못되었습니다." >&2
   exit 1
 fi
 
-echo -n "Enter node name override (optional, press Enter to skip): "
+echo -n "노드 이름 오버라이드(선택)를 입력하세요 (건너뛰려면 Enter): "
 read -r NODE_NAME
 
 echo ""
 echo "------------------------------------------------------------"
-echo " [Configuration Confirm]"
-echo " - Kubernetes Version : ${KUBERNETES_VERSION}"
-echo " - CRI-O Version      : ${CRIO_VERSION}"
-echo " - Control Plane      : ${CONTROL_PLANE_ENDPOINT}"
-echo " - Kernel Version     : ${CURRENT_KERNEL_FULL} (OK)"
+echo " [설정 확인]"
+echo " - Kubernetes 버전 : ${KUBERNETES_VERSION}"
+echo " - CRI-O 버전      : ${CRIO_VERSION}"
+echo " - 컨트롤 플레인   : ${CONTROL_PLANE_ENDPOINT}"
+echo " - 커널 버전       : ${CURRENT_KERNEL_FULL} (정상)"
 if [ -n "${NODE_NAME}" ]; then
-  echo " - Node Name Override : ${NODE_NAME}"
+  echo " - 노드 이름 지정   : ${NODE_NAME}"
 else
-  echo " - Node Name Override : (none)"
+  echo " - 노드 이름 지정   : (없음)"
 fi
 echo "------------------------------------------------------------"
-echo "Starting installation in 3 seconds... (Press Ctrl+C to cancel)"
+echo "3초 후 설치를 시작합니다... (취소: Ctrl+C)"
 sleep 3
 echo ""
 
 # ------------------------------------------------------------------------------
 # 2. System Preparation
 # ------------------------------------------------------------------------------
-echo "[Step 1] System Configuration (Deps, Swap, Modules, Sysctl)"
+echo "[1단계] 시스템 설정 (의존성, 스왑, 모듈, Sysctl)"
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -128,7 +146,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 swapoff -a
 if grep -q "swap" /etc/fstab; then
-    echo " > Disabling swap in /etc/fstab (Backup created at /etc/fstab.bak)..."
+    echo " > /etc/fstab의 swap을 비활성화합니다 (백업: /etc/fstab.bak)"
     sed -ri.bak '/\sswap\s/s/^/#/' /etc/fstab
 fi
 
@@ -157,7 +175,7 @@ install -d -m 0755 /etc/apt/keyrings
 # ------------------------------------------------------------------------------
 # 3. APT Repositories Setup
 # ------------------------------------------------------------------------------
-echo "[Step 2] Configuring APT Repositories"
+echo "[2단계] APT 저장소 구성"
 
 download_key() {
   local url="$1"
@@ -167,19 +185,19 @@ download_key() {
 
   if ! curl -fsSL "${url}" -o "${tmp}"; then
     rm -f "${tmp}"
-    echo "[ERROR] Failed to download key from: ${url}" >&2
+    echo "[오류] 키 다운로드에 실패했습니다: ${url}" >&2
     exit 1
   fi
 
   if [ ! -s "${tmp}" ]; then
     rm -f "${tmp}"
-    echo "[ERROR] Downloaded empty key file from: ${url}" >&2
+    echo "[오류] 빈 키 파일이 다운로드되었습니다: ${url}" >&2
     exit 1
   fi
 
   if ! gpg --dearmor -o "${out}" "${tmp}"; then
     rm -f "${tmp}" "${out}"
-    echo "[ERROR] Failed to convert key to keyring: ${out}" >&2
+    echo "[오류] 키링 변환에 실패했습니다: ${out}" >&2
     exit 1
   fi
 
@@ -204,7 +222,7 @@ echo "deb [signed-by=/etc/apt/keyrings/cri-o-apt-keyring.gpg] https://pkgs.k8s.i
 # ------------------------------------------------------------------------------
 # 4. Install Packages
 # ------------------------------------------------------------------------------
-echo "[Step 3] Installing Packages (CRI-O, Kubeadm, Kubelet, Kubectl)"
+echo "[3단계] 패키지 설치 (CRI-O, Kubeadm, Kubelet, Kubectl)"
 "${APT_GET[@]}" update
 "${APT_GET[@]}" install -y --no-install-recommends cri-o kubelet kubeadm kubectl
 
@@ -222,14 +240,14 @@ systemctl enable --now crio
 systemctl enable kubelet
 
 if ! systemctl is-active --quiet crio; then
-  echo "[ERROR] CRI-O is not active. Check: systemctl status crio" >&2
+  echo "[오류] CRI-O 서비스가 비활성 상태입니다. 확인: systemctl status crio" >&2
   exit 1
 fi
 
 # ------------------------------------------------------------------------------
 # 5. Join Cluster
 # ------------------------------------------------------------------------------
-echo "[Step 4] Joining Worker Node to Cluster"
+echo "[4단계] 워커 노드를 클러스터에 조인"
 
 JOIN_CMD=(
   kubeadm join "${CONTROL_PLANE_ENDPOINT}"
@@ -247,7 +265,7 @@ fi
 # ------------------------------------------------------------------------------
 # 6. User Convenience (.bashrc)
 # ------------------------------------------------------------------------------
-echo "[Step 5] Configuring Shell Convenience"
+echo "[5단계] 쉘 편의 설정"
 
 add_bash_config() {
     local target_file="$1"
@@ -263,7 +281,7 @@ complete -F __start_kubectl k
 ### K8S-SETUP-END
 EOF_BASH
     else
-        echo " > Bash config already present in $target_file"
+        echo " > Bash 설정이 이미 존재합니다: $target_file"
     fi
 }
 
@@ -289,8 +307,8 @@ fi
 # ------------------------------------------------------------------------------
 echo ""
 echo "============================================================"
-echo " [Worker Node Join Completed Successfully]"
+echo " [워커 노드 조인이 완료되었습니다]"
 echo "============================================================"
-echo " 1. Reload your shell:  source ~/.bashrc"
-echo " 2. Verify from control plane: kubectl get nodes"
+echo " 1. 쉘 다시 불러오기:  source ~/.bashrc"
+echo " 2. 컨트롤 플레인에서 확인: kubectl get nodes"
 echo "============================================================"

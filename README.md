@@ -15,6 +15,7 @@ CRIO_VERSION="v1.33"
 ```
 
 ## 사용 방법
+### Master Node
 파일 다운
 ```
 git clone https://github.com/GProjectdev/Kubernetes_Installer_with_CRIO.git
@@ -30,7 +31,30 @@ chmod +x Kubernetes_Installer_with_CRIO/k8s-masternode-setup.sh
 sudo ./Kubernetes_Installer_with_CRIO/k8s-masternode-setup.sh
 ```
 
-## Master Node 설정이기에 해당 Node에 Pod를 배포하기 위해서는 다음을 진행해야 합니다.
+### Master Node 설정이기에 해당 Node에 Pod를 배포하기 위해서는 다음을 진행해야 합니다.
 ```
 kubectl taint nodes --all node-role.kubernetes.io/control-plane-
+```
+### Worker Node
+파일 다운
+```
+git clone https://github.com/GProjectdev/Kubernetes_Installer_with_CRIO.git
+```
+
+권한부여
+```
+chmod +x Kubernetes_Installer_with_CRIO/k8s-workernode-setup.sh
+```
+
+파일 실행
+```
+sudo ./Kubernetes_Installer_with_CRIO/k8s-workernode-setup.sh
+```
+
+### Master Node 생성시 나온 join 명령어를 수행하여 Master Node와 연결해야 합니다.
+```
+sudo kubeadm join <MASTER_NODE_IP>:6443 \
+  --token <TOKEN> \
+  --discovery-token-ca-cert-hash sha256:<HASH> \
+  --cri-socket unix:///var/run/crio/crio.sock
 ```

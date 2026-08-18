@@ -59,6 +59,7 @@ sudo ./k8s_clean_uninstall.sh 2>&1 | tee k8s-clean-uninstall.log
 git clone https://github.com/WoogiBoogi1129/Kubernetes_Installer_2026.git
 cd Kubernetes_Installer_2026
 chmod +x k8s-setup.sh
+chmod +x k8s-worker-setup.sh
 ```
 
 ### 2. 설치 실행
@@ -71,6 +72,34 @@ sudo ./k8s-setup.sh
 sudo -i
 ./k8s-setup.sh
 ```
+
+### 2-1. 단계별 설치 실행
+전체 설치 대신 특정 단계만 실행하거나, 특정 단계부터 이어서 실행할 수 있습니다.
+단계는 숫자와 이름을 모두 지원합니다.
+
+```bash
+# Control Plane 단계 목록 확인
+sudo ./k8s-setup.sh --list-steps
+
+# Control Plane: 3단계만 실행
+sudo ./k8s-setup.sh --step 3
+
+# Control Plane: 이름으로 같은 단계 실행
+sudo ./k8s-setup.sh --step install-packages
+
+# Control Plane: 클러스터 초기화 단계부터 끝까지 실행
+sudo ./k8s-setup.sh --from-step init-cluster
+
+# Worker 단계 목록 확인
+sudo ./k8s-worker-setup.sh --list-steps
+
+# Worker: 조인 단계만 실행
+sudo ./k8s-worker-setup.sh --step join-cluster
+```
+
+Control Plane 단계 이름은 `system-prep`, `apt-repos`, `install-packages`, `init-cluster`, `kubeconfig`, `install-helm`, `install-cilium`, `shell-config`입니다.
+Worker 단계 이름은 `system-prep`, `apt-repos`, `install-packages`, `join-cluster`, `shell-config`입니다.
+Worker 조인 정보(endpoint, token, discovery hash, node name)는 기존처럼 실행 중 대화형 입력으로 받습니다.
 
 ### 3. 설치 과정 상호작용
 스크립트를 실행하면 설치할 버전을 묻습니다.
